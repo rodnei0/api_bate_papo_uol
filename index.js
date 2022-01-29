@@ -19,16 +19,17 @@ const participantSchema = joi.object({
 const messageSchema = joi.object({
     to: joi.string().required(),
     text: joi.string().required(),
-    type: joi.string().required(),
+    type: joi.string().pattern(new RegExp('(^message$)|(^private_message$)')).required()
   });
 
 app.post("/participants", async (req, res) => {
-    const name = req.body;
-    const validation = participantSchema.validate(name, { abortEarly: true });
+    const name = req.body.name;
+    const validation = participantSchema.validate({name});
 
     if (validation.error) {
         console.log(validation.error.details);
         res.status(422).send("Nome do usuário não pode ser uma string vazia!");
+        return
     }
 
     try {
@@ -39,14 +40,15 @@ app.post("/participants", async (req, res) => {
         const participant = await participantsCollection.findOne({ name: name });
         if (participant) {
             res.status(409).send("Nome de usuário já existe!");
-            mongoClient.close()
+            mongoClient.close();
+            return
         }
 
         await participantsCollection.insertOne({name: name, lastStatus: Date.now()});
 		res.sendStatus(201);
 		mongoClient.close()
 	 } catch (error) {
-	    res.status(500).send('A culpa foi do estagiário')
+	    res.status(500).send('A culpa foi do estagiário');
 		mongoClient.close()
 	 }
 });
@@ -61,33 +63,41 @@ app.get("/participants", async (req, res) => {
 		mongoClient.close()
 	 } catch (error) {
         console.log(error);
-	    res.status(500).send('A culpa foi do estagiário')
+	    res.status(500).send('A culpa foi do estagiário');
 		mongoClient.close()
 	 }
 });
 
 app.post("/messages", async (req, res) => {
-
     const from = req.headers.user;
     const messageInfo = req.body;
     
-    const validation = messageSchema.validate(messageInfo, { abortEarly: true });
-
+    const validation = messageSchema.validate(messageInfo, { abortEarly: false });
     if (validation.error) {
-        console.log(validation.error.details);
+        validation.error.details.map(error => console.log(error));
         res.sendStatus(422);
+        return
     }
 
     try {
 		await mongoClient.connect();
         const now = dayjs().format("HH:mm:ss");
 		const db = mongoClient.db(process.env.MONGO_NAME);
+
+        const participantsCollection = db.collection(process.env.MONGO_PARTICIPANTS);
+        const participant = await participantsCollection.findOne({ name: from });
+        if (!participant) {
+            res.sendStatus(422);
+            mongoClient.close();
+            return
+        }
+
 		const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
         await messagesCollection.insertOne({from: from, to: messageInfo.to, text: messageInfo.text, type: messageInfo.type, time: now});
 		res.sendStatus(201);
 		mongoClient.close()
 	 } catch (error) {
-	    res.status(500).send('A culpa foi do estagiário')
+	    res.status(500).send('A culpa foi do estagiário');
 		mongoClient.close()
 	 }
 });
