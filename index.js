@@ -103,12 +103,48 @@ app.post("/messages", async (req, res) => {
 });
 
 app.get("/messages", async (req, res) => {
+    const limit = parseInt(req.query.limit);
+    const from = req.headers.user;
+
     try {
 		await mongoClient.connect();
 		const db = mongoClient.db(process.env.MONGO_NAME);
 		const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
-        const messages = await messagesCollection.find({}).toArray();
-		res.send(messages);
+        // const messages = await messagesCollection.find(
+        //         {type: "message"},
+        //         {$and: [{type: "private_message"},
+        //                 {$or: [{to: from}, {from: from}]}
+        //         ]}
+        // ).toArray();
+        const messages = await messagesCollection.find(
+            {
+            $or: [
+                {type: "message"}, 
+                {$and: 
+                    [{type: "private_message"}, 
+                    {$or: 
+                        [{to: from}, {from: from}]
+                    }]
+                }]
+            }
+        ).toArray();
+        // const messages = await messagesCollection.find({
+        //     $or: [
+        //         {type: "mesage"},
+        //         $and, [
+        //             {type: "private_message"},
+        //             {to: from},
+        //             {from: from}
+        //         ]
+        //     ]
+        // }).toArray();
+
+        if (limit) {
+            res.send(messages.slice(-limit));
+		    mongoClient.close();
+            return
+        }
+        res.send(messages);
 		mongoClient.close()
 	 } catch (error) {
         console.log(error);
