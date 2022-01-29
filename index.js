@@ -45,6 +45,11 @@ app.post("/participants", async (req, res) => {
         }
 
         await participantsCollection.insertOne({name: name, lastStatus: Date.now()});
+
+        const now = dayjs().format("HH:mm:ss");
+        const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
+        await messagesCollection.insertOne({from: name, to: "todos", text: "entra na sala...", type: "status", time: now});
+
 		res.sendStatus(201);
 		mongoClient.close()
 	 } catch (error) {
@@ -62,7 +67,6 @@ app.get("/participants", async (req, res) => {
 		res.send(participants);
 		mongoClient.close()
 	 } catch (error) {
-        console.log(error);
 	    res.status(500).send('A culpa foi do estagiário');
 		mongoClient.close()
 	 }
@@ -110,16 +114,11 @@ app.get("/messages", async (req, res) => {
 		await mongoClient.connect();
 		const db = mongoClient.db(process.env.MONGO_NAME);
 		const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
-        // const messages = await messagesCollection.find(
-        //         {type: "message"},
-        //         {$and: [{type: "private_message"},
-        //                 {$or: [{to: from}, {from: from}]}
-        //         ]}
-        // ).toArray();
         const messages = await messagesCollection.find(
             {
             $or: [
-                {type: "message"}, 
+                {type: "message"},
+                {type: "status"}, 
                 {$and: 
                     [{type: "private_message"}, 
                     {$or: 
@@ -128,16 +127,6 @@ app.get("/messages", async (req, res) => {
                 }]
             }
         ).toArray();
-        // const messages = await messagesCollection.find({
-        //     $or: [
-        //         {type: "mesage"},
-        //         $and, [
-        //             {type: "private_message"},
-        //             {to: from},
-        //             {from: from}
-        //         ]
-        //     ]
-        // }).toArray();
 
         if (limit) {
             res.send(messages.slice(-limit));
@@ -147,10 +136,67 @@ app.get("/messages", async (req, res) => {
         res.send(messages);
 		mongoClient.close()
 	 } catch (error) {
-        console.log(error);
 	    res.status(500).send('A culpa foi do estagiário')
 		mongoClient.close()
 	 }
 });
+
+app.post("/status", async (req, res) => {
+    const from = req.headers.user;
+
+    try {
+		await mongoClient.connect();
+		const db = mongoClient.db(process.env.MONGO_NAME);
+		const participantsCollection = db.collection(process.env.MONGO_PARTICIPANTS);
+
+        const participant = await participantsCollection.findOne({ name: from });
+        if (!participant) {
+            res.sendStatus(404);
+            mongoClient.close();
+            return
+        }
+
+        await participantsCollection.updateOne({ name: from }, {$set: { lastStatus: Date.now() }});
+        res.sendStatus(200);
+		mongoClient.close()
+	 } catch (error) {
+	    res.status(500).send('A culpa foi do estagiário');
+		mongoClient.close()
+	 }
+});
+
+setInterval(async () => {
+    const statusNow = Date.now();
+    const statusValidation = statusNow -10000;
+
+    try {
+		await mongoClient.connect();
+		const db = mongoClient.db(process.env.MONGO_NAME);
+		const participantsCollection = db.collection(process.env.MONGO_PARTICIPANTS);
+
+        const inactiveParticipants = await participantsCollection.find({ lastStatus: {$lt: statusValidation }}).toArray();
+        await participantsCollection.deleteMany({ lastStatus: {$lt: statusValidation }});
+
+        inactiveParticipants.map(async participant => {
+        const now = dayjs().format("HH:mm:ss");
+            try {
+                // await mongoClient.connect();
+		        // const db = mongoClient.db(process.env.MONGO_NAME);
+                const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
+                await messagesCollection.insertOne({from: participant.name, to: "Todos", text: "sai da sala...", type: "status", time: now});
+                mongoClient.close()
+            } catch (error) {
+                console.log(error);
+                mongoClient.close()
+             }
+        });
+
+		// mongoClient.close()
+	 } catch (error) {
+        console.log(error);
+	    res.status(500).send('A culpa foi do estagiário');
+		mongoClient.close()
+	 }
+}, 15000);
 
 app.listen(5000);
