@@ -178,19 +178,18 @@ setInterval(async () => {
         await participantsCollection.deleteMany({ lastStatus: {$lt: statusValidation }});
 
         inactiveParticipants.map(async participant => {
-        const now = dayjs().format("HH:mm:ss");
-            try {
-                // await mongoClient.connect();
-		        // const db = mongoClient.db(process.env.MONGO_NAME);
-                const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
-                await messagesCollection.insertOne({from: participant.name, to: "Todos", text: "sai da sala...", type: "status", time: now});
-                mongoClient.close()
-            } catch (error) {
-                console.log(error);
-                mongoClient.close()
-             }
-        });
-
+            const now = dayjs().format("HH:mm:ss");
+                try {
+                    // await mongoClient.connect();
+                    // const db = mongoClient.db(process.env.MONGO_NAME);
+                    const messagesCollection = db.collection(process.env.MONGO_MESSAGES);
+                    await messagesCollection.insertOne({from: participant.name, to: "Todos", text: "sai da sala...", type: "status", time: now});
+                } catch (error) {
+                    console.log(error);
+                    mongoClient.close()
+                }
+                // mongoClient.close()
+            });
 		// mongoClient.close()
 	 } catch (error) {
         console.log(error);
